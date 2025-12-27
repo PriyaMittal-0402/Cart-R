@@ -1,74 +1,91 @@
-import { View, Text, ScrollView, Image, Alert } from 'react-native';
-import { useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import InputField from '@/components/InputField';
-import CustomButton from '@/components/CustomButton';
-import { icons, images } from '@/constants';
-import { useAuth } from '@/contexts/AuthContext';
-import { router } from 'expo-router';
+import { View, Text, TextInput, TouchableOpacity, Alert } from "react-native";
+import { useState } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { supabase } from "@/lib/supabase";
+import { router } from "expo-router";
 
 const AdminLogin = () => {
-    const { signIn } = useAuth();
-    const [form, setForm] = useState({
-        email: '',
-        password: '',
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Email and password required");
+      return;
+    }
+
+    setLoading(true);
+
+    // 1️⃣ AUTH LOGIN
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     });
-    const [loading, setLoading] = useState(false);
 
-    const onSignInPress = async () => {
-        setLoading(true);
-        try {
-            const { error } = await signIn(form.email, form.password);
-            if (error) {
-                Alert.alert('Error', error.message);
-            } else {
-                // Router redirect handled by _layout.tsx based on rule
-                // But we can force check
-                // router.replace('/(admin)/dashboard');
-            }
-        } catch (err: any) {
-            Alert.alert('Error', err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+    if (error) {
+      Alert.alert("Login failed", error.message);
+      setLoading(false);
+      return;
+    }
 
-    return (
-        <SafeAreaView className="flex-1 bg-white">
-            <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-                <View className="flex-1 p-5 justify-center">
-                    <View className="items-center mb-10">
-                        <Text className="text-3xl font-JakartaBold">Admin Portal</Text>
-                        <Text className="text-gray-400 mt-2">Authorized Personnel Only</Text>
-                    </View>
+    const user = data.user;
 
-                    <InputField
-                        label="Email"
-                        placeholder="admin@example.com"
-                        icon={icons.email}
-                        value={form.email}
-                        onChangeText={(value) => setForm({ ...form, email: value })}
-                    />
+    // 2️⃣ VERIFY ADMIN TABLE
+    const { data: admin, error: adminError } = await supabase
+      .from("admins")
+      .select("id")
+      .eq("id", user.id)
+      .single();
 
-                    <InputField
-                        label="Password"
-                        placeholder="Enter password"
-                        icon={icons.lock}
-                        secureTextEntry={true}
-                        value={form.password}
-                        onChangeText={(value) => setForm({ ...form, password: value })}
-                    />
+    if (adminError || !admin) {
+      await supabase.auth.signOut();
+      Alert.alert("Access denied", "You are not an admin");
+      setLoading(false);
+      return;
+    }
 
-                    <CustomButton
-                        title={loading ? "Logging in..." : "Login"}
-                        onPress={onSignInPress}
-                        className="mt-6"
-                        disabled={loading}
-                    />
-                </View>
-            </ScrollView>
-        </SafeAreaView>
-    );
-}
+    // 3️⃣ SUCCESS → DASHBOARD
+    router.replace("/(admin)/dashboard");
+    setLoading(false);
+  };
+
+  return (
+    <SafeAreaView className="flex-1 bg-white justify-center px-6">
+      <Text className="text-3xl font-JakartaBold text-center mb-2">
+        Admin Portal
+      </Text>
+      <Text className="text-gray-400 text-center mb-8">
+        Authorized personnel only
+      </Text>
+
+      <TextInput
+        placeholder="Admin email"
+        autoCapitalize="none"
+        className="border rounded-xl px-4 py-3 mb-4"
+        value={email}
+        onChangeText={setEmail}
+      />
+
+      <TextInput
+        placeholder="Password"
+        secureTextEntry
+        className="border rounded-xl px-4 py-3 mb-6"
+        value={password}
+        onChangeText={setPassword}
+      />
+
+      <TouchableOpacity
+        onPress={handleLogin}
+        disabled={loading}
+        className="bg-black py-4 rounded-xl"
+      >
+        <Text className="text-white text-center font-JakartaBold">
+          {loading ? "Verifying..." : "Login"}
+        </Text>
+      </TouchableOpacity>
+    </SafeAreaView>
+  );
+};
 
 export default AdminLogin;
