@@ -319,3 +319,7 @@ export function useAuth() {
 }
 
 export default AuthContext;
+adminSession: { email: string } | null;
+adminSignIn: (email: string, password: string) => Promise<{ error: string | null }>;
+adminSignOut: () => void;
+
