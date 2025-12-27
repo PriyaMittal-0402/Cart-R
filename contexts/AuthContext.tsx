@@ -23,16 +23,48 @@ interface AuthContextType {
   refreshProfile: () => Promise<void>;
   toggleDriverOnline: (isOnline: boolean) => Promise<void>;
   updateDriverLocation: (latitude: number, longitude: number) => Promise<void>;
+  adminSession: { email: string } | null;
+adminSignIn: (email: string, password: string) => Promise<{ error: string | null }>;
+adminSignOut: () => void;
+
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const adminSignIn = async (email: string, password: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('admins')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (error || !data) {
+      return { error: 'Invalid admin credentials' };
+    }
+
+    // ⚠️ TEMP simple check (later hash compare)
+    if (data.password_hash !== password) {
+      return { error: 'Invalid admin credentials' };
+    }
+
+    setAdminSession({ email: data.email });
+    router.replace('/(admin)/dashboard');
+
+    return { error: null };
+  } catch (err) {
+    return { error: 'Admin login failed' };
+  }
+};
+
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [adminSession, setAdminSession] = useState<{ email: string } | null>(null);
+
 
   // Fetch user profile from database
   const fetchProfile = async (userId: string) => {
@@ -285,22 +317,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const value: AuthContextType = {
-    user,
-    session,
-    profile,
-    driverProfile,
-    isLoading,
-    signUp,
-    signIn,
-    signInWithPhone,
-    signInWithWhatsApp,
-    verifyOtp,
-    verifyWhatsAppOtp,
-    signOut,
-    refreshProfile,
-    toggleDriverOnline,
-    updateDriverLocation,
+ const value: AuthContextType = {
+  user,
+  session,
+  profile,
+  driverProfile,
+  isLoading,
+
+  // user/driver auth
+  signUp,
+  signIn,
+  signInWithPhone,
+  signInWithWhatsApp,
+  verifyOtp,
+  verifyWhatsAppOtp,
+  signOut,
+  refreshProfile,
+  toggleDriverOnline,
+  updateDriverLocation,
+
+  // admin auth ✅
+  adminSession,
+  adminSignIn,
+  adminSignOut,
+};
+
   };
 
   return (
@@ -319,3 +360,8 @@ export function useAuth() {
 }
 
 export default AuthContext;
+const adminSignOut = () => {
+  setAdminSession(null);
+  router.replace('/(admin-auth)/login');
+};
+
